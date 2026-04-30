@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data-fetcher"
+version = "0.1.0"
+description = "NSE derivatives 1-min OHLCV+OI data fetcher"
+requires-python = ">=3.9"
+dependencies = [
+    "kiteconnect>=5.0.0",
+    "breeze-connect>=1.0.46",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "typer[all]>=0.12",
+    "structlog>=24.0",
+    "tenacity>=8.2",
+    "tqdm>=4.66",
+    "pandas>=2.0",
+]
+
+[project.scripts]
+data-fetcher = "data_fetcher.cli:app"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov",
+    "ruff>=0.4",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["data_fetcher*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
