@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from datetime import datetime, date as date_type
+from datetime import datetime, date as date_type, timedelta
 from typing import Optional
 
 import structlog
@@ -26,6 +26,8 @@ class BreezeSource(DataSource):
     _RATE_WINDOW = 60.0
     _DAILY_LIMIT = 5000
     _DAILY_WARN = 4900
+    # Breeze returns at most 2 days of 1-minute data per API call
+    _MAX_DAYS_PER_CHUNK = 2
 
     def __init__(self, settings: Settings, digestor: Optional[BreezeDigestor] = None):
         self._settings = settings
@@ -107,6 +109,18 @@ class BreezeSource(DataSource):
             strike_price=strike_price,
         )
 
+    def _date_chunks(
+        self, from_dt: datetime, to_dt: datetime
+    ) -> list[tuple[datetime, datetime]]:
+        chunks = []
+        current = from_dt
+        delta = timedelta(days=self._MAX_DAYS_PER_CHUNK)
+        while current < to_dt:
+            end = min(current + delta, to_dt)
+            chunks.append((current, end))
+            current = end
+        return chunks
+
     def fetch(
         self,
         spec: ContractSpec,
@@ -117,18 +131,30 @@ class BreezeSource(DataSource):
             raise SourceAuthError("call connect() before fetch()")
 
         from data_fetcher.nse_utils import generate_tradingsymbol
-        raw = self._fetch_raw(
-            stock_code=spec.underlying,
-            expiry_date=self._expiry_param(spec.expiry),
-            strike_price="" if spec.is_future else _fmt_strike(spec.strike),
-            right=self._map_right(spec.instrument_type),
-            product_type="futures" if spec.is_future else "options",
-            from_dt=from_dt,
-            to_dt=to_dt,
-        )
-        candles = self._digestor.digest(raw)
-        log.debug("breeze_fetched", symbol=generate_tradingsymbol(spec), candles=len(candles))
-        return sorted(candles, key=lambda c: c.date)
+        tradingsymbol = generate_tradingsymbol(spec)
+        expiry_date = self._expiry_param(spec.expiry)
+        strike_price = "" if spec.is_future else _fmt_strike(spec.strike)
+        right = self._map_right(spec.instrument_type)
+        product_type = "futures" if spec.is_future else "options"
+
+        all_candles: list[OHLCVCandle] = []
+        for chunk_start, chunk_end in self._date_chunks(from_dt, to_dt):
+            raw = self._fetch_raw(
+                stock_code=spec.underlying,
+                expiry_date=expiry_date,
+                strike_price=strike_price,
+                right=right,
+                product_type=product_type,
+                from_dt=chunk_start,
+                to_dt=chunk_end,
+            )
+            chunk_candles = self._digestor.digest(raw)
+            all_candles.extend(chunk_candles)
+            log.debug("breeze_chunk_fetched", symbol=tradingsymbol, candles=len(chunk_candles),
+                      chunk=f"{chunk_start.date()}..{chunk_end.date()}")
+
+        log.debug("breeze_fetched", symbol=tradingsymbol, candles=len(all_candles))
+        return _dedup_sort(all_candles)
 
     def supports_expired(self) -> bool:
         return True
@@ -140,3 +166,13 @@ def _fmt_strike(strike: Optional[float]) -> str:
     if strike == int(strike):
         return str(int(strike))
     return str(strike)
+
+
+def _dedup_sort(candles: list[OHLCVCandle]) -> list[OHLCVCandle]:
+    seen: set[datetime] = set()
+    out = []
+    for c in candles:
+        if c.date not in seen:
+            seen.add(c.date)
+            out.append(c)
+    return sorted(out, key=lambda c: c.date)
