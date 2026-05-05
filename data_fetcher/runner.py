@@ -117,7 +117,10 @@ class FetchRunner:
     # ------------------------------------------------------------------
 
     def _date_range(self, spec: ContractSpec) -> tuple[datetime, datetime]:
-        days = self._settings.days_before_expiry
+        if spec.underlying == "NIFTY" and not is_monthly_expiry(spec.expiry):
+            days = self._settings.days_before_expiry_weekly
+        else:
+            days = self._settings.days_before_expiry
         from_date = spec.expiry - timedelta(days=days)
         h_open, m_open = _MARKET_OPEN
         h_close, m_close = _MARKET_CLOSE

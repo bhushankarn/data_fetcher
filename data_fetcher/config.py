@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     # Fetch behaviour
     default_source: Literal["kite", "breeze", "auto"] = "auto"
     days_before_expiry: int = 30
+    days_before_expiry_weekly: int = 14
     overwrite: bool = False
     underlyings: list[str] = Field(default=["NIFTY", "BANKNIFTY"])
 
