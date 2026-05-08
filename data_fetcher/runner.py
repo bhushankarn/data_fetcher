@@ -181,17 +181,17 @@ class FetchRunner:
         instrument_types: list[str],
         include_weekly: bool,
     ) -> list[ContractSpec]:
-        from data_fetcher.instruments.bhavcopy import contracts_for_expiry, BhavCopyNotFoundError
-        bhavcopy_dir = self._require_bhavcopy_dir()
-        expiries = expiries_in_range(
-            expiry_from, expiry_to,
-            include_weekly=include_weekly,
-            include_monthly=True,
+        from data_fetcher.instruments.bhavcopy import (
+            contracts_for_expiry, BhavCopyNotFoundError, expiry_dates_for_underlying,
         )
+        bhavcopy_dir = self._require_bhavcopy_dir()
         itypes_upper = [t.upper() for t in instrument_types]
         inc_fut = "FUT" in itypes_upper
         specs: list[ContractSpec] = []
         for underlying in underlyings:
+            expiries = expiry_dates_for_underlying(
+                underlying, bhavcopy_dir, expiry_from, expiry_to, include_weekly=include_weekly,
+            )
             for expiry in expiries:
                 try:
                     batch = contracts_for_expiry(

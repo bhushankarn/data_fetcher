@@ -28,7 +28,8 @@ def last_thursday_of_month(year: int, month: int) -> date:
 
 
 def is_monthly_expiry(expiry: date) -> bool:
-    return expiry == last_thursday_of_month(expiry.year, expiry.month)
+    # Last occurrence of this weekday in the month — works for any expiry day (Thu, Tue, etc.)
+    return (expiry + timedelta(days=7)).month != expiry.month
 
 
 def _format_strike(strike: float) -> str:

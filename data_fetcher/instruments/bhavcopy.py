@@ -121,6 +121,40 @@ def contracts_for_expiry(
     return sorted(specs, key=_sort_key)
 
 
+def expiry_dates_for_underlying(
+    underlying: str,
+    bhavcopy_dir: Path,
+    from_date: date,
+    to_date: date,
+    include_weekly: bool = True,
+    _sample_interval: int = 30,
+) -> list[date]:
+    """Return sorted expiry dates for `underlying` in [from_date, to_date].
+
+    Samples bhavcopy files every `_sample_interval` days across the range — each file
+    lists all currently active contracts (typically 3+ months of future expiries), so
+    a handful of samples cover multi-month ranges without reading every daily file.
+    """
+    from data_fetcher.nse_utils import is_monthly_expiry
+    expiries: set[date] = set()
+    sample = from_date
+    while sample <= to_date:
+        path = _find_bhavcopy(bhavcopy_dir, sample)
+        if path:
+            df = pd.read_csv(path, dtype=str, usecols=["SYMBOL", "EXPIRY_DT_FINAL"])
+            for val in df.loc[df["SYMBOL"] == underlying, "EXPIRY_DT_FINAL"].unique():
+                try:
+                    exp = date.fromisoformat(val)
+                    if from_date <= exp <= to_date:
+                        expiries.add(exp)
+                except ValueError:
+                    pass
+        sample += timedelta(days=_sample_interval)
+    if not include_weekly:
+        expiries = {e for e in expiries if is_monthly_expiry(e)}
+    return sorted(expiries)
+
+
 def strikes_for_expiry(
     underlying: str,
     expiry: date,

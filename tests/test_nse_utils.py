@@ -35,6 +35,14 @@ def test_weekly_is_not_monthly():
 def test_non_thursday_is_not_monthly():
     assert is_monthly_expiry(date(2025, 4, 23)) is False
 
+def test_is_monthly_tuesday_september_2025():
+    # NIFTY moved to Tuesday expiry — Sep 30 2025 is the last Tuesday of September
+    assert is_monthly_expiry(date(2025, 9, 30)) is True
+
+def test_weekly_tuesday_is_not_monthly():
+    # Sep 23 2025 is a Tuesday but not the last one (Sep 30 comes after)
+    assert is_monthly_expiry(date(2025, 9, 23)) is False
+
 
 # ── generate_tradingsymbol ─────────────────────────────────────────────────
 
