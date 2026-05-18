@@ -41,3 +41,10 @@ class Settings(BaseSettings):
     # Structure: {bhavcopy_dir}/{YYYY}/{Mon}/{YYYYMMDD}_NSEFO.csv
     bhavcopy_dir: Optional[Path] = None
 
+    # PostgreSQL connection
+    db_host: str = "localhost"
+    db_port: int = 5432
+    db_name: str = ""
+    db_user: str = ""
+    db_password: str = ""
+

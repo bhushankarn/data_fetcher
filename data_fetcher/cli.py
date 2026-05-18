@@ -9,6 +9,8 @@ import structlog
 import typer
 
 from data_fetcher.config import Settings
+from data_fetcher.db import create_futures_table, get_connection
+from data_fetcher.db_sync import sync_output
 from data_fetcher.models import ContractSpec, InstrumentType
 from data_fetcher.nse_utils import generate_tradingsymbol
 from data_fetcher.runner import FetchRunner
@@ -170,6 +172,71 @@ def _print_bulk_summary(results: list) -> None:
         typer.echo(f"  ERROR {r.tradingsymbol}: {r.error}", err=True)
     if errors:
         raise typer.Exit(1)
+
+
+@app.command("db-init")
+def db_init(
+    underlying: List[str] = typer.Option(
+        [], "--underlying", "-u",
+        help="Underlying symbol to create futures table for (repeat for multiple; default: all found in output/)",
+    ),
+    output_dir: Optional[Path] = typer.Option(None, "--output-dir", "-o"),
+) -> None:
+    """Create futures tables in the database (idempotent — safe to re-run)."""
+    _setup_logging()
+    settings = Settings()
+    if output_dir is not None:
+        object.__setattr__(settings, "output_dir", output_dir)
+
+    root = settings.output_dir
+    if underlying:
+        targets = [u.upper() for u in underlying]
+    else:
+        targets = [d.name.upper() for d in sorted(root.iterdir()) if d.is_dir()] if root.is_dir() else []
+
+    if not targets:
+        typer.echo("No underlyings found. Pass --underlying or ensure output/ has subdirectories.")
+        raise typer.Exit(1)
+
+    conn = get_connection(settings)
+    try:
+        for u in targets:
+            create_futures_table(conn, u)
+            typer.echo(f"Created/verified table: {u.lower()}_futures")
+    finally:
+        conn.close()
+
+
+@app.command("db-sync")
+def db_sync(
+    underlying: List[str] = typer.Option(
+        [], "--underlying", "-u",
+        help="Filter to specific underlying (repeat for multiple; default: all)",
+    ),
+    types: List[str] = typer.Option(
+        [], "--type", "-t",
+        help="Instrument type to sync: FUT | CE | PE (repeat for multiple; default: all)",
+    ),
+    expiry: Optional[str] = typer.Option(None, "--expiry", "-e", help="Filter to single expiry YYYY-MM-DD"),
+    output_dir: Optional[Path] = typer.Option(None, "--output-dir", "-o"),
+) -> None:
+    """Scan output/ folder and upsert CSV data into the database."""
+    _setup_logging()
+    settings = Settings()
+    if output_dir is not None:
+        object.__setattr__(settings, "output_dir", output_dir)
+
+    expiry_date = None
+    if expiry:
+        from datetime import date as date_type
+        expiry_date = date_type.fromisoformat(expiry)
+
+    sync_output(
+        settings=settings,
+        underlyings=underlying or None,
+        types=types or None,
+        expiry=expiry_date,
+    )
 
 
 @app.command("generate-symbol")
